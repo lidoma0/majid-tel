@@ -1,0 +1,14 @@
+{
+  "appId": "ir.majidtel.app",
+  "appName": "مجید تل",
+  "webDir": "www",
+  "server": {
+    "url": "https://lidoma0.github.io/majid-tel/",
+    "errorPath": "offline.html",
+    "androidScheme": "https"
+  },
+  "android": {
+    "appendUserAgent": "MajidTelApp",
+    "backgroundColor": "#060911"
+  }
+}

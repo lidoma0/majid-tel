@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060911">
+<meta name="description" content="مجید تل — سامانه خرید همکاری موبایل استوک">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="مجید تل">
+<title>مجید تل | فروش همکاری موبایل استوک</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preload" href="assets/fonts/Vazirmatn-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/icons.css">
+</head>
+<body class="pb-28 md:pb-12">
+
+<div id="toasts" class="fixed top-20 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-[92%] max-w-sm pointer-events-none"></div>
+<div id="offline" class="hidden fixed top-0 inset-x-0 z-[90] bg-rose-600 text-center text-xs font-bold py-1.5">اتصال اینترنت برقرار نیست</div>
+
+<!-- ============ HEADER ============ -->
+<header class="glass-bar sticky top-0 z-40 border-b border-white/5 px-4 py-3 safe-top">
+  <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
+    <button onclick="go('shop')" class="flex items-center gap-2.5 text-right">
+      <img src="icons/icon-192.png" alt="" class="w-10 h-10 rounded-2xl shadow-lg shadow-sky-500/25">
+      <div>
+        <h1 class="font-black text-lg leading-tight tracking-tight flex items-center gap-1.5">مجید تل <span id="demo-badge" class="hidden text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">دمو</span></h1>
+        <p id="subtitle" class="text-[11px] text-slate-400">فروش همکاری موبایل استوک</p>
+      </div>
+    </button>
+    <div class="flex items-center gap-2">
+      <div class="hidden md:flex bg-dark-800/90 p-1 rounded-xl border border-white/10 text-xs font-semibold">
+        <button id="top-shop" onclick="go('shop')" class="px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><i class="ph-bold ph-storefront"></i>ویترین</button>
+        <button id="top-admin" onclick="go('admin')" class="px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><i class="ph-bold ph-lock-key admin-icon"></i>مدیریت</button>
+      </div>
+      <button onclick="openCart()" aria-label="سبد خرید" class="relative w-10 h-10 rounded-xl bg-dark-800 border border-white/10 flex items-center justify-center hover:border-sky-500/50 active:scale-95 transition">
+        <i class="ph-bold ph-shopping-bag text-xl"></i>
+        <span class="cart-badge absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-rose-500 text-[11px] font-bold flex items-center justify-center border-2 border-dark-950 hidden">۰</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 pt-4">
+
+  <!-- ============ SHOP ============ -->
+  <section id="view-shop" class="space-y-5">
+    <a id="app-banner" href="#" class="hidden glass rounded-2xl p-3 flex items-center gap-3 border border-emerald-500/30 animate-fade-in">
+      <span class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0"><i class="ph-fill ph-android-logo text-2xl"></i></span>
+      <span class="flex-1 min-w-0"><b class="block text-sm">اپلیکیشن اندروید مجید تل</b><span class="text-[11px] text-slate-400">دانلود مستقیم، نصب سریع و خرید راحت‌تر</span></span>
+      <span class="px-3 py-2 rounded-xl bg-emerald-500 text-xs font-bold shrink-0 flex items-center gap-1"><i class="ph-bold ph-download-simple"></i>دانلود</span>
+    </a>
+
+    <div id="partner-card" class="glass rounded-2xl p-3.5 flex items-center justify-between gap-3 border-r-4 border-r-sky-500 min-h-[72px]"></div>
+
+    <div class="relative">
+      <i class="ph ph-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+      <input id="search" oninput="renderShop()" type="search" placeholder="جستجوی مدل، مثلاً iPhone 13 یا سامسونگ..." class="field !rounded-2xl !py-3.5 !pr-11">
+    </div>
+
+    <div id="chips" class="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1"></div>
+
+    <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+      <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 pulse"></span>موجودی لحظه‌ای انبار</span>
+      <span id="shop-count" class="font-semibold text-slate-300"></span>
+    </div>
+
+    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+    <div id="shop-empty" class="hidden glass rounded-3xl p-10 text-center space-y-3">
+      <div class="w-16 h-16 rounded-full bg-white/5 mx-auto flex items-center justify-center text-slate-500"><i class="ph-duotone ph-device-mobile-slash text-3xl"></i></div>
+      <h3 class="font-bold">گوشی‌ای پیدا نشد</h3>
+      <p class="text-xs text-slate-400">فیلتر یا عبارت جستجو را تغییر دهید.</p>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN ============ -->
+  <section id="view-admin" class="hidden space-y-5">
+    <div class="glass rounded-2xl px-4 py-3 flex items-center justify-between border-r-4 border-r-amber-400">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center"><i class="ph-duotone ph-crown text-xl"></i></div>
+        <div>
+          <h2 class="font-bold text-sm">پنل مدیریت مجید تل</h2>
+          <p id="admin-greet" class="text-[11px] text-slate-400"></p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="refreshAdmin(true)" aria-label="بروزرسانی" class="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center"><i id="admin-refresh-icon" class="ph-bold ph-arrows-clockwise"></i></button>
+        <button onclick="lockAdmin()" class="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-1.5 transition"><i class="ph-bold ph-lock"></i>خروج</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-4 gap-1.5 bg-dark-800/90 p-1.5 rounded-2xl border border-white/10">
+      <button data-tab="dash" class="tab-btn"><i class="ph-bold ph-chart-line-up text-base"></i>حسابداری</button>
+      <button data-tab="orders" class="tab-btn"><i class="ph-bold ph-receipt text-base"></i><span class="flex items-center gap-1">فاکتورها<span id="pending-dot"></span></span></button>
+      <button data-tab="add" class="tab-btn"><i class="ph-bold ph-plus-circle text-base"></i>گوشی جدید</button>
+      <button data-tab="stock" class="tab-btn"><i class="ph-bold ph-package text-base"></i>انبار</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="tab-dash" class="tab-panel space-y-5">
+      <div id="kpis" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+
+      <div class="glass rounded-3xl p-4 sm:p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="font-bold text-sm flex items-center gap-2"><i class="ph-fill ph-chart-bar text-emerald-400"></i>نمودار فروش</h3>
+            <p id="chart-sub" class="text-[11px] text-slate-400 mt-0.5"></p>
+          </div>
+          <div class="flex bg-dark-950/90 p-1 rounded-xl border border-white/10 self-start">
+            <button data-period="daily" class="period-btn">روزانه</button>
+            <button data-period="monthly" class="period-btn">ماهانه</button>
+            <button data-period="yearly" class="period-btn">سالانه</button>
+          </div>
+        </div>
+        <div id="chart"></div>
+      </div>
+
+      <div id="reserved-box" class="hidden glass rounded-3xl p-4 sm:p-5 space-y-3">
+        <h3 class="font-bold text-sm flex items-center gap-2"><i class="ph-fill ph-hourglass-medium text-amber-400"></i>رزرو شده در سبد همکاران <span class="text-[11px] font-normal text-slate-400">(هنوز فاکتور نشده)</span></h3>
+        <div id="reserved" class="space-y-2"></div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="glass rounded-3xl p-4 sm:p-5 space-y-3">
+          <h3 class="font-bold text-sm flex items-center gap-2"><i class="ph-fill ph-trophy text-amber-400"></i>پرفروش‌ترین گوشی‌ها</h3>
+          <div id="top-products" class="space-y-2"></div>
+        </div>
+        <div class="glass rounded-3xl p-4 sm:p-5 space-y-3">
+          <h3 class="font-bold text-sm flex items-center gap-2"><i class="ph-fill ph-users-three text-sky-400"></i>همکاران برتر</h3>
+          <div id="top-partners" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders -->
+    <div id="tab-orders" class="tab-panel hidden space-y-3">
+      <div class="flex items-center justify-between gap-2 px-1">
+        <h3 class="font-bold text-sm">دفتر فاکتورها (<span id="orders-count">۰</span>)</h3>
+        <select id="order-filter" onchange="renderOrders()" class="field !w-auto !py-2 !px-3 !text-xs">
+          <option value="all">همه</option>
+          <option value="pending">در انتظار تسویه</option>
+          <option value="paid">تسویه شده</option>
+          <option value="shipped">ارسال شده</option>
+          <option value="canceled">لغو شده</option>
+        </select>
+      </div>
+      <div id="orders" class="space-y-3"></div>
+    </div>
+
+    <!-- Add product -->
+    <div id="tab-add" class="tab-panel hidden">
+      <form id="product-form" onsubmit="saveProduct(event)" class="glass rounded-3xl p-5 sm:p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <h2 id="form-title" class="font-bold text-base">تعریف گوشی جدید</h2>
+            <p class="text-xs text-slate-400 mt-0.5">بلافاصله در ویترین همه همکاران نمایش داده می‌شود</p>
+          </div>
+          <button type="button" id="cancel-edit" onclick="resetForm()" class="hidden text-xs text-slate-400 hover:text-white">انصراف</button>
+        </div>
+
+        <label class="block cursor-pointer group">
+          <input type="file" id="f-image" accept="image/*" class="hidden" onchange="pickImage(event)">
+          <div id="img-box" class="relative h-48 rounded-2xl border-2 border-dashed border-white/15 group-hover:border-sky-500/60 bg-dark-950/60 overflow-hidden flex flex-col items-center justify-center gap-2 text-slate-400 transition"></div>
+        </label>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-slate-300 mb-1.5">نام مدل *</label>
+            <input id="f-name" required maxlength="80" class="field" placeholder="iPhone 14 Pro Max 256GB" dir="auto">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-300 mb-1.5">برند *</label>
+            <select id="f-brand" class="field"></select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-300 mb-1.5">مشخصات / گرید</label>
+          <input id="f-specs" maxlength="160" class="field" placeholder="ZAA • باتری ۹۴٪ • Grade A++ بدون خط و خش">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-slate-300 mb-1.5">قیمت همکاری (تومان) *</label>
+            <input id="f-price" required inputmode="numeric" class="field text-left font-bold" dir="ltr" placeholder="48,500,000" oninput="formatPriceInput(this)">
+            <p id="f-price-words" class="text-[10px] text-emerald-400 mt-1 h-3"></p>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-300 mb-1.5">موجودی *</label>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="stepStock(-1)" class="w-11 h-11 shrink-0 rounded-xl bg-white/5 hover:bg-white/10 font-bold">−</button>
+              <input id="f-stock" required type="number" min="0" max="999" value="1" class="field text-center font-black !px-1">
+              <button type="button" onclick="stepStock(1)" class="w-11 h-11 shrink-0 rounded-xl bg-white/5 hover:bg-white/10 font-bold">+</button>
+            </div>
+          </div>
+        </div>
+        <button id="product-submit" type="submit" class="btn-primary w-full py-3.5">
+          <i class="ph-bold ph-check-circle text-lg"></i><span id="submit-label">ثبت و انتشار در ویترین</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Stock -->
+    <div id="tab-stock" class="tab-panel hidden space-y-3">
+      <div class="flex items-center justify-between px-1">
+        <h3 class="font-bold text-sm">مدیریت انبار (<span id="stock-count">۰</span> مدل)</h3>
+        <button onclick="openTab('add')" class="text-xs text-sky-400 font-bold flex items-center gap-1"><i class="ph-bold ph-plus"></i>افزودن</button>
+      </div>
+      <div id="stock-list" class="space-y-2.5"></div>
+
+      <div class="glass rounded-2xl p-4 space-y-3">
+        <h4 class="font-bold text-sm flex items-center gap-2"><i class="ph-duotone ph-gear text-slate-300"></i>تنظیمات</h4>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="changePin()" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold flex items-center gap-1.5"><i class="ph-bold ph-password"></i>تغییر رمز مدیر</button>
+          <button onclick="exportData()" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold flex items-center gap-1.5"><i class="ph-bold ph-download-simple"></i>خروجی اکسل فاکتورها</button>
+          <button id="demo-reset" onclick="resetDemo()" class="hidden px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 text-xs font-bold flex items-center gap-1.5"><i class="ph-bold ph-arrow-counter-clockwise"></i>بازنشانی دمو</button>
+        </div>
+        <p id="partners-count" class="text-[11px] text-slate-400"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ MOBILE NAV ============ -->
+<nav class="md:hidden fixed bottom-0 inset-x-0 glass-bar border-t border-white/10 z-40 px-6 pt-2 safe-bottom flex items-center justify-around">
+  <button id="nav-shop" onclick="go('shop')" class="flex flex-col items-center gap-1 py-1 px-4 transition"><i class="ph-fill ph-storefront text-xl"></i><span class="text-[10px] font-bold">ویترین</span></button>
+  <button onclick="openCart()" aria-label="سبد خرید" class="relative -top-5 w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 shadow-xl shadow-sky-500/30 flex items-center justify-center border-4 border-dark-950 active:scale-95 transition">
+    <i class="ph-bold ph-shopping-bag text-2xl"></i>
+    <span class="cart-badge absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold flex items-center justify-center border-2 border-dark-950 hidden">۰</span>
+  </button>
+  <button id="nav-admin" onclick="go('admin')" class="flex flex-col items-center gap-1 py-1 px-4 transition"><i class="ph-bold ph-lock-key admin-icon text-xl"></i><span class="text-[10px] font-bold">مدیریت</span></button>
+</nav>
+
+<!-- ============ REGISTER ============ -->
+<div id="reg-modal" class="modal items-end sm:items-center">
+  <form onsubmit="saveProfile(event)" class="glass !bg-dark-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 space-y-4 animate-slide-up safe-bottom max-h-[95vh] overflow-y-auto">
+    <div class="text-center space-y-2 pb-1">
+      <img src="icons/icon-192.png" alt="" class="w-14 h-14 mx-auto rounded-2xl shadow-lg shadow-sky-500/25">
+      <h3 id="reg-title" class="font-black text-lg">به مجید تل خوش آمدید</h3>
+      <p class="text-xs text-slate-400">برای خرید همکاری، فقط یک بار مشخصات خود را ثبت کنید</p>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs text-slate-300 mb-1.5">نام *</label><input id="r-first" required maxlength="40" class="field" placeholder="علی" autocomplete="given-name"></div>
+      <div><label class="block text-xs text-slate-300 mb-1.5">نام خانوادگی *</label><input id="r-last" required maxlength="40" class="field" placeholder="محمدی" autocomplete="family-name"></div>
+    </div>
+    <div><label class="block text-xs text-slate-300 mb-1.5">نام فروشگاه</label><input id="r-shop" maxlength="60" class="field" placeholder="موبایل آریا (اختیاری)" autocomplete="organization"></div>
+    <div>
+      <label class="block text-xs text-slate-300 mb-1.5">شماره موبایل *</label>
+      <input id="r-phone" required type="tel" inputmode="numeric" maxlength="11" class="field text-left tracking-wider" dir="ltr" placeholder="09xxxxxxxxx" autocomplete="tel">
+      <p id="r-phone-err" class="text-[11px] text-rose-400 mt-1 h-3"></p>
+    </div>
+    <div><label class="block text-xs text-slate-300 mb-1.5">آدرس *</label><textarea id="r-address" required rows="2" maxlength="200" class="field resize-none" placeholder="تهران، پاساژ علاءالدین، طبقه ۴، واحد ۴۱۲" autocomplete="street-address"></textarea></div>
+    <div class="flex gap-2">
+      <button type="button" id="reg-close" onclick="closeModal('reg-modal')" class="hidden px-5 rounded-2xl bg-white/5 hover:bg-white/10 text-sm font-bold">بستن</button>
+      <button id="reg-submit" type="submit" class="btn-primary flex-1 py-3.5">ثبت و ورود به ویترین</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ ADMIN PIN ============ -->
+<div id="pin-modal" class="modal items-center p-4">
+  <div id="pin-card" class="glass !bg-dark-900 w-full max-w-xs rounded-3xl p-6 space-y-5 animate-fade-in">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center"><i class="ph-duotone ph-shield-check text-2xl"></i></div>
+        <div><h3 id="pin-title" class="font-bold text-sm">ورود مدیر</h3><p id="pin-sub" class="text-[11px] text-slate-400">رمز را وارد کنید</p></div>
+      </div>
+      <button onclick="closeModal('pin-modal')" class="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400"><i class="ph-bold ph-x"></i></button>
+    </div>
+    <div>
+      <div id="pin-dots" class="flex justify-center gap-4 py-4 bg-dark-950/90 rounded-2xl border border-white/10" dir="ltr"></div>
+      <p id="pin-err" class="text-center text-[11px] text-rose-400 h-4 mt-2"></p>
+    </div>
+    <div id="keypad" class="grid grid-cols-3 gap-2.5" dir="ltr"></div>
+  </div>
+</div>
+
+<!-- ============ CART ============ -->
+<div id="cart-modal" class="modal !justify-start !items-stretch" onclick="if(event.target===this)closeModal('cart-modal')">
+  <div class="bg-dark-900 w-full max-w-md h-full flex flex-col border-l border-white/10 shadow-2xl animate-slide-in safe-top">
+    <div class="p-4 border-b border-white/10 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <i class="ph-duotone ph-shopping-bag text-2xl text-sky-400"></i>
+        <div><h3 class="font-bold">سبد خرید همکاری</h3><p id="cart-sub" class="text-[11px] text-slate-400">گوشی‌ها برای شما رزرو شده‌اند</p></div>
+      </div>
+      <button onclick="closeModal('cart-modal')" aria-label="بستن" class="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center"><i class="ph-bold ph-x text-lg"></i></button>
+    </div>
+    <div id="cart-items" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    <div id="cart-footer" class="p-4 border-t border-white/10 space-y-3 safe-bottom">
+      <div id="cart-partner" class="bg-white/5 rounded-xl p-3 text-xs space-y-1"></div>
+      <div class="flex items-center justify-between px-1">
+        <span class="text-sm text-slate-300">مبلغ کل:</span>
+        <div><span id="cart-total" class="text-xl font-black text-emerald-400">۰</span> <span class="text-xs text-slate-400">تومان</span></div>
+      </div>
+      <button id="checkout-btn" onclick="checkout()" class="w-full py-3.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-600 hover:brightness-110 font-bold text-sm shadow-lg shadow-emerald-500/20 active:scale-[.98] transition flex items-center justify-center gap-2 disabled:opacity-60">
+        <i class="ph-bold ph-check-fat text-lg"></i>ثبت نهایی سفارش
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MY ORDERS ============ -->
+<div id="myorders-modal" class="modal items-end sm:items-center" onclick="if(event.target===this)closeModal('myorders-modal')">
+  <div class="glass !bg-dark-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-slide-up safe-bottom max-h-[85vh] flex flex-col">
+    <div class="flex items-center justify-between">
+      <h3 class="font-bold flex items-center gap-2"><i class="ph-duotone ph-receipt text-amber-400 text-xl"></i>سفارش‌های من</h3>
+      <button onclick="closeModal('myorders-modal')" class="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><i class="ph-bold ph-x"></i></button>
+    </div>
+    <div id="myorders" class="space-y-3 overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- ============ CONFIRM ============ -->
+<div id="confirm-modal" class="modal items-center p-4 !z-[60]">
+  <div class="glass !bg-dark-900 w-full max-w-xs rounded-3xl p-6 space-y-4 text-center animate-fade-in">
+    <div class="w-14 h-14 mx-auto rounded-full bg-rose-500/15 text-rose-400 flex items-center justify-center"><i class="ph-duotone ph-warning text-3xl"></i></div>
+    <p id="confirm-text" class="text-sm font-semibold leading-7"></p>
+    <div class="flex gap-2">
+      <button onclick="closeModal('confirm-modal')" class="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold">انصراف</button>
+      <button id="confirm-ok" class="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-sm font-bold">تایید</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SUCCESS ============ -->
+<div id="success-modal" class="modal items-center p-4 !z-[60]">
+  <div class="glass !bg-dark-900 w-full max-w-sm rounded-3xl p-7 space-y-4 text-center animate-fade-in">
+    <div class="w-20 h-20 mx-auto rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center animate-pop"><i class="ph-fill ph-seal-check text-5xl"></i></div>
+    <h3 class="font-black text-lg">سفارش شما ثبت شد</h3>
+    <p class="text-sm text-slate-400 leading-7">شماره فاکتور: <b id="success-id" class="text-amber-400"></b><br>مجید تل به‌زودی برای تسویه و ارسال با شما تماس می‌گیرد.</p>
+    <button onclick="closeModal('success-modal')" class="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/15 font-bold text-sm">باشه</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

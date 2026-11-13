@@ -1,0 +1,10 @@
+node_modules/
+android/
+*.p12
+majidtel-keystore.txt
+www/assets/fonts/
+www/assets/app.css
+www/assets/icons.css
+www/icons/
+www/majidtel.apk
+/assets/

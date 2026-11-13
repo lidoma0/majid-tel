@@ -1,0 +1,93 @@
+name: Build APK & Deploy site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install & build web
+        run: |
+          npm ci
+          npm run build
+          sed -i "s/__BUILD__/${GITHUB_RUN_NUMBER}/" www/sw.js
+
+      - name: Check signing key
+        id: key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::warning::ANDROID_KEYSTORE_B64 secret not set, skipping APK build"; fi
+
+      - name: Create Android project
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          npx cap add android
+          npx capacitor-assets generate --android --iconBackgroundColor '#0ea5e9' --splashBackgroundColor '#060911'
+          npx cap sync android
+          sed -i "s/versionCode 1$/versionCode ${GITHUB_RUN_NUMBER}/; s/versionName \"1.0\"/versionName \"1.0.${GITHUB_RUN_NUMBER}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
+      - name: Build release APK
+        if: steps.key.outputs.ok == 'true'
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -q
+
+      - name: Sign APK
+        if: steps.key.outputs.ok == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          echo "$KEYSTORE_B64" | base64 -d > release.p12
+          "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          "$BT/apksigner" sign --ks release.p12 --ks-type PKCS12 --ks-key-alias majidtel \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD --out www/majidtel.apk aligned.apk
+          "$BT/apksigner" verify www/majidtel.apk
+          rm release.p12
+          ls -lh www/majidtel.apk
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: www
+
+      - uses: actions/upload-artifact@v4
+        if: steps.key.outputs.ok == 'true'
+        with:
+          name: majidtel-apk
+          path: www/majidtel.apk
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
