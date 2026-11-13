@@ -74,6 +74,7 @@ values ('admin_pin_hash', encode(extensions.digest('1988', 'sha256'), 'hex'))
 on conflict (key) do nothing;
 -- مدت رزرو گوشی در سبد (دقیقه). بعد از این مدت اگر فاکتور ثبت نشود، به انبار برمی‌گردد.
 insert into settings(key, value) values ('reserve_minutes', '120') on conflict (key) do nothing;
+alter table partners add column if not exists is_guest boolean not null default false;
 
 -- ---------- توابع کمکی داخلی ----------
 create or replace function _release_expired() returns void
@@ -87,6 +88,9 @@ begin
   update products p set stock = p.stock + e.total
   from (select product_id, sum(qty) total from expired group by product_id) e
   where p.id = e.product_id;
+  -- مهمان‌های قدیمی بدون سبد پاک می‌شوند
+  delete from partners pa where pa.is_guest and pa.created_at < now() - interval '1 day'
+    and not exists (select 1 from cart_items c where c.partner_id = pa.id);
 end $$;
 
 -- خروجی: null یعنی رمز درست است؛ در غیر این صورت کد خطا.
@@ -135,24 +139,47 @@ $$;
 drop function if exists list_products();
 -- p_light = true: بدون عکس (برای به‌روزرسانی سبک و دوره‌ای موجودی)
 create or replace function list_products(p_light boolean default false) returns jsonb
-language plpgsql security definer set search_path = public as $
+language plpgsql security definer set search_path = public as $$
 begin
   perform _release_expired();
   return coalesce((select jsonb_agg(case when p_light then to_jsonb(p) - 'image' else to_jsonb(p) end
                    order by (p.stock > 0) desc, p.created_at desc) from products p), '[]'::jsonb);
-end $;
+end $$;
+
+-- مهمان: بدون ثبت‌نام می‌تواند گوشی را در سبد رزرو کند؛ ثبت‌نام هنگام ثبت نهایی سفارش.
+create or replace function create_guest() returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare t uuid;
+begin
+  insert into partners(first_name, last_name, phone, address, is_guest)
+  values ('', '', 'guest:' || gen_random_uuid(), '', true) returning token into t;
+  return jsonb_build_object('token', t);
+end $$;
 
 create or replace function register_partner(p_first text, p_last text, p_shop text, p_phone text, p_address text, p_token uuid default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare r partners;
+declare r partners; cur partners; other partners;
 begin
   if p_phone !~ '^09[0-9]{9}$' then raise exception 'BAD_PHONE'; end if;
   if length(trim(p_first)) = 0 or length(trim(p_last)) = 0 or length(trim(p_address)) = 0 then raise exception 'MISSING'; end if;
 
-  if p_token is not null then
+  if p_token is not null then select * into cur from partners where token = p_token; end if;
+  select * into other from partners where phone = p_phone and (cur.id is null or id <> cur.id);
+
+  if cur.id is not null and other.id is not null then
+    -- این شماره قبلاً ثبت شده: سبد مهمان/حساب فعلی به حساب قبلی منتقل می‌شود
+    insert into cart_items(partner_id, product_id, qty, reserved_at)
+    select other.id, product_id, qty, reserved_at from cart_items where partner_id = cur.id
+    on conflict (partner_id, product_id) do update set qty = cart_items.qty + excluded.qty, reserved_at = now();
+    delete from cart_items where partner_id = cur.id;
+    if cur.is_guest then delete from partners where id = cur.id; end if;
     update partners set first_name = trim(p_first), last_name = trim(p_last), shop = trim(coalesce(p_shop, '')),
-                        phone = p_phone, address = trim(p_address)
-    where token = p_token returning * into r;
+                        address = trim(p_address)
+    where id = other.id returning * into r;
+  elsif cur.id is not null then
+    update partners set first_name = trim(p_first), last_name = trim(p_last), shop = trim(coalesce(p_shop, '')),
+                        phone = p_phone, address = trim(p_address), is_guest = false
+    where id = cur.id returning * into r;
   end if;
   if r.id is null then
     insert into partners(first_name, last_name, shop, phone, address)
@@ -198,6 +225,7 @@ create or replace function checkout(p_token uuid) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare r partners := _partner(p_token); items jsonb; tot bigint; oid text;
 begin
+  if r.is_guest then raise exception 'NOT_REGISTERED'; end if;
   select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'price', p.price, 'qty', c.qty)),
          sum(p.price * c.qty)
   into items, tot
@@ -243,7 +271,7 @@ begin
     'reserved', coalesce((select jsonb_agg(jsonb_build_object('partner', pa.first_name || ' ' || pa.last_name, 'phone', pa.phone,
                           'name', p.name, 'qty', c.qty, 'at', c.reserved_at) order by c.reserved_at)
                           from cart_items c join partners pa on pa.id = c.partner_id join products p on p.id = c.product_id), '[]'::jsonb),
-    'partners', (select count(*) from partners)
+    'partners', (select count(*) from partners where not is_guest)
   );
 end $$;
 
@@ -313,7 +341,7 @@ end $$;
 
 -- ---------- دسترسی‌ها ----------
 revoke all on all functions in schema public from public, anon, authenticated;
-grant execute on function list_products(boolean), register_partner(text,text,text,text,text,uuid), get_cart(uuid),
+grant execute on function list_products(boolean), create_guest(), register_partner(text,text,text,text,text,uuid), get_cart(uuid),
   cart_add(uuid,uuid,int), checkout(uuid), my_orders(uuid), admin_login(text), admin_data(text),
   admin_save_product(text,jsonb), admin_adjust_stock(text,uuid,int), admin_delete_product(text,uuid),
   admin_set_status(text,text,text), admin_change_pin(text,text)

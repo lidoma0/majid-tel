@@ -17,7 +17,7 @@ const ERRORS = {
   OUT_OF_STOCK: 'موجودی این گوشی همین الان تمام شد', NO_PARTNER: 'حساب همکاری پیدا نشد؛ دوباره ثبت‌نام کنید',
   BAD_PHONE: 'شماره موبایل معتبر نیست', MISSING: 'همه فیلدهای ستاره‌دار را پر کنید', EMPTY_CART: 'سبد خرید خالی است',
   BAD_PIN: 'رمز اشتباه است', LOCKED: 'به دلیل تلاش‌های زیاد، ورود مدیر ۱۰ دقیقه قفل شد', BAD_NEW_PIN: 'رمز جدید باید ۴ تا ۸ رقم باشد',
-  NETWORK: 'اتصال به سرور برقرار نشد؛ اینترنت را بررسی کنید', NO_ORDER: 'فاکتور پیدا نشد'
+  NETWORK: 'اتصال به سرور برقرار نشد؛ اینترنت را بررسی کنید', NO_ORDER: 'فاکتور پیدا نشد', NOT_REGISTERED: 'برای ثبت سفارش ابتدا ثبت‌نام کنید'
 };
 const FA_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const REMOTE = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
@@ -74,10 +74,19 @@ const demo = (() => {
   const sortP = l => l.slice().sort((a, b) => (b.stock > 0) - (a.stock > 0) || b.created_at.localeCompare(a.created_at));
   const fns = {
     list_products: (d, { p_light }) => sortP(d.products).map(p => p_light ? { ...p, image: undefined } : p),
+    create_guest: d => { const p = { id: uid(), token: uid(), guest: true, first: '', last: '', phone: '', address: '' }; d.partners.push(p); return { token: p.token }; },
     register_partner: (d, a) => {
       if (!/^09\d{9}$/.test(a.p_phone)) throw new Error('BAD_PHONE');
-      let p = (a.p_token && d.partners.find(x => x.token === a.p_token)) || d.partners.find(x => x.phone === a.p_phone);
+      const cur = a.p_token && d.partners.find(x => x.token === a.p_token);
+      const other = d.partners.find(x => x.phone === a.p_phone && x !== cur);
+      let p = cur;
+      if (cur && other) { // شماره قبلاً ثبت شده: سبد منتقل می‌شود
+        d.carts.forEach(c => { if (c.partner === cur.id) c.partner = other.id; });
+        if (cur.guest) d.partners = d.partners.filter(x => x !== cur);
+        p = other;
+      } else if (!p) p = other;
       if (!p) { p = { id: uid(), token: uid() }; d.partners.push(p); }
+      p.guest = false;
       Object.assign(p, { first: a.p_first.trim(), last: a.p_last.trim(), shop: (a.p_shop || '').trim(), phone: a.p_phone, address: a.p_address.trim() });
       return pjson(p);
     },
@@ -97,7 +106,9 @@ const demo = (() => {
       return cart(d, p);
     },
     checkout: (d, { p_token }) => {
-      const p = partner(d, p_token), items = cart(d, p).map(({ id, name, price, qty }) => ({ id, name, price, qty }));
+      const p = partner(d, p_token);
+      if (p.guest) throw new Error('NOT_REGISTERED');
+      const items = cart(d, p).map(({ id, name, price, qty }) => ({ id, name, price, qty }));
       if (!items.length) throw new Error('EMPTY_CART');
       const o = { id: 'MT-' + (++d.seq), ts: new Date().toISOString(), partner_id: p.id, partner: { ...pjson(p), token: undefined }, items, total: items.reduce((s, i) => s + i.price * i.qty, 0), status: 'pending' };
       d.orders.unshift(o); d.carts = d.carts.filter(x => x.partner !== p.id);
@@ -106,7 +117,7 @@ const demo = (() => {
     my_orders: (d, { p_token }) => { const p = partner(d, p_token); return d.orders.filter(o => o.partner_id === p.id); },
     admin_login: (d, { p_pin }) => (admin(d, p_pin), { ok: true }),
     admin_data: (d, { p_pin }) => (admin(d, p_pin), {
-      products: d.products.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(p => ({ ...p, image: undefined })), orders: d.orders, partners: d.partners.length,
+      products: d.products.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(p => ({ ...p, image: undefined })), orders: d.orders, partners: d.partners.filter(x => !x.guest).length,
       reserved: d.carts.map(c => { const p = d.partners.find(x => x.id === c.partner), pr = d.products.find(x => x.id === c.product); return { partner: p ? p.first + ' ' + p.last : '', phone: p?.phone, name: pr?.name, qty: c.qty, at: c.at }; })
     }),
     admin_save_product: (d, { p_pin, p }) => {
@@ -145,6 +156,15 @@ const S = {
 };
 const ui = { view: 'shop', tab: 'dash', period: 'daily', filter: 'all', pin: '', pinMode: 'login', newPin: '', adminPin: SS.get(KEY + '_pin'), editId: null, image: null, loading: true, busy: new Set(), skipPop: 0 };
 try { S.partner = JSON.parse(LS.get(KEY + '_partner')); } catch {}
+S.guest = LS.get(KEY + '_guest'); // توکن مهمان (سبد قبل از ثبت‌نام)
+const token = () => S.partner?.token || S.guest || null;
+async function ensureToken() {
+  if (token()) return token();
+  const r = await rpc('create_guest');
+  S.guest = r.token; LS.set(KEY + '_guest', S.guest);
+  return S.guest;
+}
+function dropIdentity() { S.partner = null; S.guest = null; S.cart = []; LS.del(KEY + '_partner'); LS.del(KEY + '_guest'); }
 
 /* =========================================================
    Helpers
@@ -187,14 +207,11 @@ function toast(msg, type = 'info') {
   setTimeout(() => { el.style.cssText = 'opacity:0;transform:translateY(-8px);transition:all .25s'; setTimeout(() => el.remove(), 250); }, 2800);
 }
 const openModals = () => document.querySelectorAll('.modal.open').length;
-function openModal(id) { $(id).classList.add('open'); document.body.style.overflow = 'hidden'; history.pushState({ modal: id }, ''); }
+function openModal(id) { $(id).classList.add('open'); document.body.style.overflow = 'hidden'; }
 function closeModal(id, fromPop) {
   const m = $(id); if (!m.classList.contains('open')) return;
   m.classList.remove('open'); if (!openModals()) document.body.style.overflow = '';
-  if (!fromPop && history.state && history.state.modal === id) { ui.skipPop++; history.back(); }
 }
-// دکمه برگشت اندروید مودال را می‌بندد
-window.addEventListener('popstate', () => { if (ui.skipPop > 0) { ui.skipPop--; return; } const open = [...document.querySelectorAll('.modal.open')].pop(); if (open) closeModal(open.id, true); });
 function confirmBox(text, onOk) { $('confirm-text').textContent = text; $('confirm-ok').onclick = () => { closeModal('confirm-modal'); onOk(); }; openModal('confirm-modal'); }
 async function withBusy(key, fn) {
   if (ui.busy.has(key)) return; ui.busy.add(key);
@@ -240,9 +257,9 @@ async function refreshProducts(full = false) {
   }
 }
 async function refreshCart() {
-  if (!S.partner) { S.cart = []; return renderCart(); }
-  try { S.cart = await rpc('get_cart', { p_token: S.partner.token }); renderCart(); }
-  catch (e) { if (e.message === 'NO_PARTNER') { S.partner = null; LS.del(KEY + '_partner'); renderPartner(); openRegister(); } }
+  if (!token()) { S.cart = []; return renderCart(); }
+  try { S.cart = await rpc('get_cart', { p_token: token() }); renderCart(); }
+  catch (e) { if (e.message === 'NO_PARTNER') { dropIdentity(); renderPartner(); renderCart(); } }
 }
 async function refreshAdmin(manual = false) {
   if (!ui.adminPin) return;
@@ -285,15 +302,16 @@ function renderPartner() {
       <button onclick="openMyOrders()" aria-label="سفارش‌های من" class="h-10 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-amber-300 flex items-center gap-1.5 transition"><i class="ph-bold ph-receipt text-base"></i><span class="hidden sm:inline">سفارش‌های من</span></button>
       <button onclick="openRegister(true)" aria-label="ویرایش" class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sky-400 flex items-center justify-center transition"><i class="ph-bold ph-pencil-simple text-base"></i></button>
     </div>` : `
-    <div class="flex items-center gap-3"><i class="ph-duotone ph-handshake text-3xl text-sky-400"></i><div><b class="text-sm block">همکار عزیز، خوش آمدید</b><span class="text-[11px] text-slate-400">برای خرید یک بار ثبت‌نام کنید</span></div></div>
+    <div class="flex items-center gap-3"><i class="ph-duotone ph-handshake text-3xl text-sky-400"></i><div><b class="text-sm block">همکار عزیز، خوش آمدید</b><span class="text-[11px] text-slate-400">گوشی را به سبد اضافه کنید؛ ثبت‌نام هنگام ثبت سفارش</span></div></div>
     <button onclick="openRegister()" class="px-4 py-2.5 rounded-xl bg-sky-500 text-xs font-bold shrink-0">ثبت‌نام</button>`;
 }
 function openRegister(editing = false) {
   const p = S.partner || {};
   $('r-first').value = p.first || ''; $('r-last').value = p.last || ''; $('r-shop').value = p.shop || '';
   $('r-phone').value = p.phone || ''; $('r-address').value = p.address || ''; $('r-phone-err').textContent = '';
-  $('reg-title').textContent = editing ? 'ویرایش مشخصات همکار' : 'به مجید تل خوش آمدید';
-  $('reg-close').classList.toggle('hidden', false);
+  $('reg-title').textContent = editing ? 'ویرایش مشخصات همکار' : ui.afterRegister ? 'یک قدم تا ثبت سفارش' : 'ثبت‌نام همکار';
+  $('reg-sub').textContent = ui.afterRegister ? 'برای صدور فاکتور، فقط یک بار مشخصات خود را وارد کنید' : 'مشخصات شما برای صدور فاکتور استفاده می‌شود';
+  $('reg-submit').textContent = editing ? 'ذخیره تغییرات' : ui.afterRegister ? 'ثبت‌نام و ثبت نهایی سفارش' : 'ثبت‌نام';
   openModal('reg-modal');
 }
 async function saveProfile(e) {
@@ -303,10 +321,13 @@ async function saveProfile(e) {
   const btn = $('reg-submit'), label = btn.innerHTML; btn.disabled = true; btn.innerHTML = spin;
   try {
     const isNew = !S.partner;
-    S.partner = await rpc('register_partner', { p_first: $('r-first').value.trim(), p_last: $('r-last').value.trim(), p_shop: $('r-shop').value.trim(), p_phone: phone, p_address: $('r-address').value.trim(), p_token: S.partner?.token || null });
+    S.partner = await rpc('register_partner', { p_first: $('r-first').value.trim(), p_last: $('r-last').value.trim(), p_shop: $('r-shop').value.trim(), p_phone: phone, p_address: $('r-address').value.trim(), p_token: token() });
     LS.set(KEY + '_partner', JSON.stringify(S.partner));
-    renderPartner(); closeModal('reg-modal'); refreshCart();
-    toast(isNew ? `${S.partner.first} عزیز، خوش آمدید!` : 'مشخصات به‌روز شد', 'success');
+    S.guest = null; LS.del(KEY + '_guest');
+    renderPartner(); closeModal('reg-modal');
+    await refreshCart(); renderShop();
+    if (ui.afterRegister) { ui.afterRegister = false; checkout(); }
+    else toast(isNew ? `${S.partner.first} عزیز، خوش آمدید!` : 'مشخصات به‌روز شد', 'success');
   } catch (err) { toast(errMsg(err), 'error'); }
   finally { btn.disabled = false; btn.innerHTML = label; }
 }
@@ -387,18 +408,18 @@ function renderShop() {
 
 /* ---------- One-click buy ---------- */
 function buy(id, btn) {
-  if (!S.partner) { openRegister(); toast('اول ثبت‌نام کنید؛ فقط چند ثانیه طول می‌کشد', 'info'); return; }
   return withBusy('buy' + id, async () => {
     if (btn) { btn.disabled = true; btn.innerHTML = spin; }
     try {
-      S.cart = await rpc('cart_add', { p_token: S.partner.token, p_product: id, p_delta: 1 });
+      const t = await ensureToken();
+      S.cart = await rpc('cart_add', { p_token: t, p_product: id, p_delta: 1 });
       const p = S.products.find(x => x.id === id); if (p) p.stock = Math.max(0, p.stock - 1);
       renderShop(); renderCart(); bumpBadge();
       if (navigator.vibrate) try { navigator.vibrate(30); } catch {}
       toast(`${p ? p.name : 'گوشی'} به سبد اضافه شد`, 'success');
     } catch (e) {
       toast(errMsg(e), 'error');
-      if (e.message === 'NO_PARTNER') { S.partner = null; LS.del(KEY + '_partner'); openRegister(); }
+      if (e.message === 'NO_PARTNER') { dropIdentity(); renderPartner(); renderCart(); toast('دوباره روی خرید بزنید', 'info'); }
     }
     refreshProducts();
   });
@@ -419,7 +440,9 @@ function renderCart() {
   $('cart-partner').innerHTML = p ? `
     <div class="flex justify-between"><span class="text-slate-400">خریدار:</span><b>${esc(fullName(p))}</b></div>
     <div class="flex justify-between"><span class="text-slate-400">موبایل:</span><span dir="ltr">${fa(esc(p.phone))}</span></div>
-    <p class="text-[11px] text-slate-400 truncate pt-1 border-t border-white/5">${esc(p.address)}</p>` : '';
+    <p class="text-[11px] text-slate-400 truncate pt-1 border-t border-white/5">${esc(p.address)}</p>` :
+    `<p class="flex items-center gap-2 text-slate-300"><i class="ph-duotone ph-identification-card text-lg text-sky-400"></i>برای ثبت نهایی، فقط یک بار نام، شماره و آدرس را وارد می‌کنید.</p>`;
+  const cl = $('checkout-label'); if (cl) cl.textContent = p ? 'ثبت نهایی سفارش' : 'ادامه و ثبت سفارش';
   $('cart-items').innerHTML = !S.cart.length ? `
     <div class="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
       <div class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center text-slate-500"><i class="ph-duotone ph-shopping-bag-open text-4xl"></i></div>
@@ -446,7 +469,7 @@ function renderCart() {
 function cartQty(id, d) {
   return withBusy('cart' + id, async () => {
     try {
-      S.cart = await rpc('cart_add', { p_token: S.partner.token, p_product: id, p_delta: d });
+      S.cart = await rpc('cart_add', { p_token: token(), p_product: id, p_delta: d });
       const p = S.products.find(x => x.id === id); if (p) p.stock = Math.max(0, p.stock - d);
       renderCart(); renderShop();
       if (d < -1 || !S.cart.find(c => c.id === id)) toast('از سبد حذف شد و به انبار برگشت', 'info');
@@ -457,14 +480,18 @@ function cartQty(id, d) {
 function openCart() { renderCart(); openModal('cart-modal'); refreshCart(); }
 function checkout() {
   if (!S.cart.length) return;
-  if (!S.partner) return openRegister();
+  // ثبت‌نام فقط وقتی لازم است که همکار می‌خواهد سفارش را نهایی کند
+  if (!S.partner) { ui.afterRegister = true; closeModal('cart-modal'); return setTimeout(() => openRegister(), 50); }
   return withBusy('checkout', async () => {
     const btn = $('checkout-btn'), label = btn.innerHTML; btn.disabled = true; btn.innerHTML = spin + ' در حال ثبت...';
     try {
       const r = await rpc('checkout', { p_token: S.partner.token });
       S.cart = []; renderCart(); renderShop(); closeModal('cart-modal');
       $('success-id').textContent = fa(r.id); openModal('success-modal');
-    } catch (e) { toast(errMsg(e), 'error'); refreshCart(); }
+    } catch (e) {
+      if (e.message === 'NOT_REGISTERED') { dropIdentity(); renderPartner(); }
+      toast(errMsg(e), 'error'); refreshCart();
+    }
     finally { btn.disabled = false; btn.innerHTML = label; }
   });
 }
@@ -789,7 +816,6 @@ function init() {
     fetch(CFG.APK_URL, { method: 'HEAD' }).then(r => { if (r.ok) { const b = $('app-banner'); b.href = CFG.APK_URL; b.classList.remove('hidden'); } }).catch(() => {});
   }
   updateAdminIcon(); openTab('dash'); go('shop'); refreshCart();
-  if (!S.partner) setTimeout(() => { if (!S.partner) openRegister(); }, 600);
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 document.addEventListener('DOMContentLoaded', init);

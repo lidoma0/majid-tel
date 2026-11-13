@@ -240,7 +240,7 @@
     <div class="text-center space-y-2 pb-1">
       <img src="icons/icon-192.png" alt="" class="w-14 h-14 mx-auto rounded-2xl shadow-lg shadow-sky-500/25">
       <h3 id="reg-title" class="font-black text-lg">به مجید تل خوش آمدید</h3>
-      <p class="text-xs text-slate-400">برای خرید همکاری، فقط یک بار مشخصات خود را ثبت کنید</p>
+      <p id="reg-sub" class="text-xs text-slate-400"></p>
     </div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="block text-xs text-slate-300 mb-1.5">نام *</label><input id="r-first" required maxlength="40" class="field" placeholder="علی" autocomplete="given-name"></div>
@@ -254,7 +254,7 @@
     </div>
     <div><label class="block text-xs text-slate-300 mb-1.5">آدرس *</label><textarea id="r-address" required rows="2" maxlength="200" class="field resize-none" placeholder="تهران، پاساژ علاءالدین، طبقه ۴، واحد ۴۱۲" autocomplete="street-address"></textarea></div>
     <div class="flex gap-2">
-      <button type="button" id="reg-close" onclick="closeModal('reg-modal')" class="hidden px-5 rounded-2xl bg-white/5 hover:bg-white/10 text-sm font-bold">بستن</button>
+      <button type="button" id="reg-close" onclick="ui.afterRegister=false;closeModal('reg-modal')" class="px-5 rounded-2xl bg-white/5 hover:bg-white/10 text-sm font-bold">بستن</button>
       <button id="reg-submit" type="submit" class="btn-primary flex-1 py-3.5">ثبت و ورود به ویترین</button>
     </div>
   </form>
@@ -296,7 +296,7 @@
         <div><span id="cart-total" class="text-xl font-black text-emerald-400">۰</span> <span class="text-xs text-slate-400">تومان</span></div>
       </div>
       <button id="checkout-btn" onclick="checkout()" class="w-full py-3.5 rounded-2xl bg-gradient-to-l from-emerald-500 to-teal-600 hover:brightness-110 font-bold text-sm shadow-lg shadow-emerald-500/20 active:scale-[.98] transition flex items-center justify-center gap-2 disabled:opacity-60">
-        <i class="ph-bold ph-check-fat text-lg"></i>ثبت نهایی سفارش
+        <i class="ph-bold ph-check-fat text-lg"></i><span id="checkout-label">ثبت نهایی سفارش</span>
       </button>
     </div>
   </div>
