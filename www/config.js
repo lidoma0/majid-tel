@@ -6,8 +6,8 @@
 //  کلید anon عمومی است و قرار گرفتنش اینجا امن است؛ همه کارهای حساس روی سرور بررسی می‌شوند.
 // =====================================================
 window.MAJIDTEL_CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_URL: 'https://jxqeauoptwganziougmz.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_LWbBJmLckUaiRc_Js9VAKw_XJnfnlvi',
   APK_URL: 'majidtel.apk',
   SUPPORT_PHONE: ''
 };
